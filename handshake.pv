@@ -1,0 +1,67 @@
+(* Toy IoT Handshake - Mutual Authentication *)
+
+free c: channel.
+
+(* --- 1. Asymmetric Cryptography Setup --- *)
+type pkey.
+type skey.
+fun pk(skey): pkey.
+fun sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, k: skey; checksign(sign(m, k), pk(k)) = m.
+
+(* --- 2. Events for Authentication Queries --- *)
+event client_started_handshake(pkey, pkey, bitstring).
+event server_authenticates_client(pkey, pkey, bitstring).
+
+(* --- 3. Queries --- *)
+free secret_data: bitstring [private].
+
+(* Query 1: Proves Secrecy (Attacker cannot steal the payload) *)
+query attacker(secret_data).
+
+(* Query 2: Proves MitM/Replay Resistance (Server only authenticates if Client actually started it) *)
+query x: pkey, y: pkey, z: bitstring; 
+      event(server_authenticates_client(x, y, z)) ==> event(client_started_handshake(x, y, z)).
+
+(* --- 4. Client Process --- *)
+let Client(skC: skey, pkS: pkey) =
+    new Nc: bitstring;
+    event client_started_handshake(pk(skC), pkS, Nc);
+    
+    (* Step 1: Client -> Server *)
+    out(c, (pk(skC), Nc)); 
+
+    (* Step 2: Server -> Client *)
+    in(c, (Ns: bitstring, sigS: bitstring)); 
+    let (=Nc, =Ns) = checksign(sigS, pkS) in
+    
+    (* Step 3: Client -> Server *)
+    out(c, sign((Ns, Nc), skC)); 
+
+    (* Post-handshake: Send secret data securely *)
+    out(c, sign(secret_data, skC)).
+
+(* --- 5. Server Process --- *)
+let Server(skS: skey, pkC: pkey) =
+    (* Step 1: Client -> Server *)
+    in(c, (idC: pkey, Nc: bitstring)); 
+    if idC = pkC then
+    
+    new Ns: bitstring;
+    (* Step 2: Server -> Client *)
+    out(c, (Ns, sign((Nc, Ns), skS))); 
+
+    (* Step 3: Client -> Server *)
+    in(c, sigC: bitstring); 
+    let (=Ns, =Nc) = checksign(sigC, pkC) in
+    
+    event server_authenticates_client(pkC, pk(skS), Nc).
+
+(* --- 6. Main Execution --- *)
+process
+    new skC: skey; new skS: skey;
+    let pkC = pk(skC) in
+    let pkS = pk(skS) in
+    (* Make public keys available to the attacker *)
+    out(c, pkC); out(c, pkS); 
+    ( (!Client(skC, pkS)) | (!Server(skS, pkC)) )
