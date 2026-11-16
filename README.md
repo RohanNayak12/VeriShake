@@ -113,7 +113,7 @@ represented in the model.
 1.  **Clone the repository and create a virtual environment:**
 
     ``` bash
-    git clone https://github.com/YOUR_USERNAME/VeriShake.git
+    git clone https://github.com/RohanNayak12/VeriShake.git
     cd VeriShake
     python3 -m venv venv
     source venv/bin/activate
